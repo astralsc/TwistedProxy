@@ -3,7 +3,6 @@
 import os
 import json
 import time
-import frida
 import argparse
 
 from Replay import Replay
@@ -16,9 +15,6 @@ from TCP.Client.endpoint import ClientEndpoint
 from UDP.protocol import UDPProtocol
 
 
-MAX_FRIDA_RETRY = 10
-
-
 def onClose(udp_protocol):
         print("[*] Closing proxy !")
 
@@ -26,51 +22,8 @@ def onClose(udp_protocol):
             udp_protocol.packetProcessor.stop()
 
 
-def start_frida_script():
-    # Would be better to use frida.get_usb_device().spawn to spawn the app
-    # But it seems that it is broken on some version so we use adb to spawn the game
-    os.system("adb shell monkey -p com.supercell.clashroyale -c android.intent.category.LAUNCHER 1")
-    time.sleep(0.5)
-
-    try:
-        device = frida.get_usb_device()
-
-    except Exception as exception:
-        print('[*] Can\'t connect to your device ({}) !'.format(exception.__class__.__name__))
-        exit()
-
-    retry_count = 0
-    process = None
-
-    while not process:
-        try:
-            process = device.attach('com.supercell.clashroyale')
-
-        except Exception as exception:
-            if retry_count == MAX_FRIDA_RETRY:
-                print('[*] Can\'t attach frida to the game ({}) ! Start the frida server on your device'.format(exception.__class__.__name__))
-                exit()
-
-            retry_count += 1
-            time.sleep(0.5)
-
-    print('[*] Frida attached !')
-
-    if os.path.isfile("urandom_hook.js"):
-        script = process.create_script(open("urandom_hook.js").read())
-
-    else:
-        print('[*] urandom_hook.js script is missing, cannot inject the script !')
-        exit()
-
-    script.load()
-
-    print('[*] Script injected !')
-
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Python proxy used to decrypt all clash royale game traffic')
-    parser.add_argument('-f', '--frida', help='inject the frida script at the proxy runtime', action='store_true')
     parser.add_argument('-v', '--verbose', help='print packet hexdump in console', action='store_true')
     parser.add_argument('-r', '--replay', help='save packets in replay folder', action='store_true')
     parser.add_argument('-u', '--udp', help='start the udp proxy', action='store_true')
@@ -83,9 +36,6 @@ if __name__ == '__main__':
     else:
         print('[*] config.json is missing !')
         exit()
-
-    if args.frida:
-        start_frida_script()
 
     crypto = Crypto(config['ServerKey'])
     replay = Replay(config['ReplayDirectory'])
